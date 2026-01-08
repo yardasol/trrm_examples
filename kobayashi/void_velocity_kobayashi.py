@@ -15,7 +15,6 @@ source_mat_data.order = 0
 source_mat_data.set_total([source_total_xs])
 source_mat_data.set_absorption([source_total_xs * (1.0 - scattering_ratio)])
 source_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[source_total_xs * scattering_ratio]]]),0,3))
-source_mat_data.set_inverse_velocity(7.491561236955716e-08)
 
 void_total_xs = 1.0e-4
 void_mat_data = openmc.XSdata('void', groups)
@@ -23,7 +22,6 @@ void_mat_data.order = 0
 void_mat_data.set_total([void_total_xs])
 void_mat_data.set_absorption([void_total_xs * (1.0 - scattering_ratio)])
 void_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[void_total_xs * scattering_ratio]]]),0,3))
-void_mat_data.set_inverse_veocity(7.312235661583052e-08)
 
 shield_total_xs = 0.1
 shield_mat_data = openmc.XSdata('shield', groups)
@@ -31,7 +29,6 @@ shield_mat_data.order = 0
 shield_mat_data.set_total([shield_total_xs])
 shield_mat_data.set_absorption([shield_total_xs * (1.0 - scattering_ratio)])
 shield_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[shield_total_xs * scattering_ratio]]]),0,3))
-shield_mat_data.set_inverse_velocity(7.491561236955716e-08)
 
 mg_cross_sections_file = openmc.MGXSLibrary(groups)
 mg_cross_sections_file.add_xsdatas([source_mat_data, void_mat_data, shield_mat_data])
@@ -182,41 +179,6 @@ settings.batches = 1600
 settings.particles = 1000000
 settings.run_mode = 'fixed source'
 
-# kinetic settings
-settings.kinetic_simulation = True
-settings.timestep_parameters = {'n_timesteps': 5, 'timestep_units': 's', 'dt':
-                                0.1}
-density_timeseries = np.linspace(1, 0.95, 100)
-materials[0].set_density(
-    'macro', density=1.0, density_timeseries=density_timeseries)
-
-# Overlay mesh of 1cm cubes
-mesh = openmc.RegularMesh()
-pitch = [1.0, 1.0, 1.0]
-mesh.dimension = (60, 100, 60)
-mesh.lower_left = (0.0, 0.0, 0.0)
-mesh.upper_right = (60.0, 100.0, 60.0)
-settings.random_ray['source_region_meshes'] = [
-    (mesh, [model.geometry.root_universe])]
-settings.random_ray['time_derivative_method'] = 'isotropic'
-settings.timestep_parameters['n_timesteps'] = '100'
-
-## Random Ray Settigngs
-lower_left = (0.0, 0.0, 0.0)
-upper_right = (x, y, z)
-uniform_dist = openmc.stats.Box(lower_left, upper_right, only_fissionable=False)
-rr_source = openmc.IndependentSource(space=uniform_dist)
-
-settings.batches = 1100
-settings.inactive = 100
-settings.particles = 7500
-settings.run_mode = 'fixed source'
-settings.random_ray['distance_active'] = 400.0
-settings.random_ray['distance_inactive'] = 150.0
-settings.random_ray['ray_source'] = rr_source
-settings.random_ray['volume_normalized_flux_tallies'] = False
-
-
 #settings.random_ray_distance_active = 100.0
 #settings.random_ray_distance_inactive = 20.0
 #settings.solver_type = 'random ray'
@@ -245,99 +207,20 @@ source = openmc.IndependentSource(space=spatial_distribution, energy=energy_dist
 settings.source = [source]
 #settings.export_to_xml()
 
-###############################################################################
-# Define tallies
+## Tallies
+tallies = openmc.Tallies()
+ebins = [1e-5, 20.0e6]
+groups = openmc.mgxs.EnergyGroups(group_edges=ebins)
+inv_vbar = openmc.mgxs.InverseVelocity(domain=shield_cell, domain_type='cell',
+                                       energy_groups=groups)
+inv_vbar.by_nuclide = False
+for tally in inv_vbar.tallies.values():
+    tallies.append(tally)
 
-# Create a mesh that will be used for tallying
-#mesh = openmc.RegularMesh()
-#mesh.dimension = (x_dim, y_dim, z_dim)
-#mesh.lower_left = (0.0, 0.0, 0.0)
-#mesh.upper_right = (x, y, z)
-
-# Create a mesh filter that can be used in a tally
-#mesh_filter = openmc.MeshFilter(mesh)
-
-# Now use the mesh filter in a tally and indicate what scores are desired
-#tally = openmc.Tally(name="Mesh tally")
-#tally.filters = [mesh_filter]
-#tally.scores = ['flux']
-#tally.estimator = 'collision'
-#tally.estimator = 'analog'
-
-estimator = 'tracklength'
-
-# Case 3A
-mesh_3A = openmc.RegularMesh()
-mesh_3A.dimension = (1, y_dim, 1)
-mesh_3A.lower_left = (0.0, 0.0, 0.0)
-mesh_3A.upper_right = (10.0, y, 10.0)
-mesh_filter_3A = openmc.MeshFilter(mesh_3A)
-
-tally_3A = openmc.Tally(name="Case 3A")
-tally_3A.filters = [mesh_filter_3A]
-tally_3A.scores = ['flux']
-tally_3A.estimator = estimator
-
-# Case 3B
-mesh_3B = openmc.RegularMesh()
-mesh_3B.dimension = (x_dim, 1, 1)
-mesh_3B.lower_left = (0.0, 50.0, 0.0)
-mesh_3B.upper_right = (x, 60.0, 10.0)
-mesh_filter_3B = openmc.MeshFilter(mesh_3B)
-
-tally_3B = openmc.Tally(name="Case 3B")
-tally_3B.filters = [mesh_filter_3B]
-tally_3B.scores = ['flux']
-tally_3B.estimator = estimator
-
-# Case 3C
-mesh_3C = openmc.RegularMesh()
-mesh_3C.dimension = (x_dim, 1, 1)
-mesh_3C.lower_left = (0.0, 90.0, 30.0)
-mesh_3C.upper_right = (x, 100.0, 40.0)
-mesh_filter_3C = openmc.MeshFilter(mesh_3C)
-
-tally_3C = openmc.Tally(name="Case 3C")
-tally_3C.filters = [mesh_filter_3C]
-tally_3C.scores = ['flux']
-tally_3C.estimator = estimator
-
-# Source
-source_filter = openmc.UniverseFilter(su)
-tally_source = openmc.Tally(name="Source")
-tally_source.filters = [source_filter]
-tally_source.scores = ['flux']
-tally_source.estimator = estimator
-
-# Void
-void_filter = openmc.UniverseFilter(vu)
-tally_void = openmc.Tally(name="Void")
-tally_void.filters = [void_filter]
-tally_void.scores = ['flux']
-tally_void.estimator = estimator
-
-# Shield
-shield_filter = openmc.MaterialFilter(shield_mat)
-tally_shield = openmc.Tally(name="Shield")
-tally_shield.filters = [shield_filter]
-tally_shield.scores = ['flux']
-tally_shield.estimator = estimator
-
-# Far Cell
-mesh_far = openmc.RegularMesh()
-mesh_far.dimension = (1, 1, 1)
-mesh_far.lower_left = (50.0, 90.0, 50.0)
-mesh_far.upper_right = (60, 100.0, 60.0)
-mesh_filter_far = openmc.MeshFilter(mesh_far)
-
-tally_far = openmc.Tally(name="Case far")
-tally_far.filters = [mesh_filter_far]
-tally_far.scores = ['flux']
-tally_far.estimator = estimator
-
-# Instantiate a Tallies collection and export to XML
-tallies = openmc.Tallies([tally_3A, tally_3B, tally_3C, tally_source, tally_void, tally_shield, tally_far])
-
-model = openmc.Model(geometry=geometry, materials=mats, settings=settings, tallies=tallies)
-model.export_to_model_xml()
-
+model = openmc.model.Model(materials=materials_file, geometry=geometry, settings=settings,
+                           tallies=tallies)
+sp_path = model.run()
+sp = openmc.StatePoint(sp_path)
+inv_vbar.load_from_statepoint(sp)
+print(inv_vbar.xs_tally.mean.flatten()[0])
+print(inv_vbar.xs_tally.std_dev.flatten()[0])
