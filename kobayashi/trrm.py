@@ -1,6 +1,25 @@
 import numpy as np
+import argparse
 
 import openmc
+
+def parse_arguments():
+    """Parses arguments from command line.
+
+    Returns
+    -------
+    k : bool
+        Flag to determine if the model is static or kinetic
+
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--kinetic',
+                        action='store_true',
+                        default=False,
+                        help='Whether or not to generate a kinetic model.')
+    args = parser.parse_args()
+    return args.kinetic
+
 
 def fill_3d_list(n, val):
     """
@@ -15,7 +34,7 @@ def fill_3d_list(n, val):
     """
     return [[[val for _ in range(n)] for _ in range(n)] for _ in range(n)]
 
-def create_random_ray_model():
+def create_random_ray_model(kinetic=False):
     ###############################################################################
     # Create multigroup data
 
@@ -33,20 +52,27 @@ def create_random_ray_model():
     source_mat_data.set_total([source_total_xs])
     source_mat_data.set_absorption([source_total_xs * (1.0 - scattering_ratio)])
     source_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[source_total_xs * scattering_ratio]]]),0,3))
-    
+    if (kinetic):
+        source_mat_data.set_inverse_velocity([1.0])
+
     void_total_xs = 1.0e-4
     void_mat_data = openmc.XSdata('void', groups)
     void_mat_data.order = 0
     void_mat_data.set_total([void_total_xs])
     void_mat_data.set_absorption([void_total_xs * (1.0 - scattering_ratio)])
     void_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[void_total_xs * scattering_ratio]]]),0,3))
-    
+    if (kinetic):
+        void_mat_data.set_inverse_velocity([1.0])
+
     shield_total_xs = 0.1
     shield_mat_data = openmc.XSdata('shield', groups)
     shield_mat_data.order = 0
     shield_mat_data.set_total([shield_total_xs])
     shield_mat_data.set_absorption([shield_total_xs * (1.0 - scattering_ratio)])
     shield_mat_data.set_scatter_matrix(np.rollaxis(np.array([[[shield_total_xs * scattering_ratio]]]),0,3))
+    if (kinetic):
+        shield_mat_data.set_inverse_velocity([1.0])
+
 
     mg_cross_sections_file = openmc.MGXSLibrary(groups)
     mg_cross_sections_file.add_xsdatas([source_mat_data, void_mat_data, shield_mat_data])
@@ -270,6 +296,15 @@ def create_random_ray_model():
     # These are full problem sources
     #source = openmc.IndependentSource(energy=energy_distribution, domains=[full_domain], strength=1.0) # Highest level cell (making entire domain a source)
     #source = openmc.IndependentSource(energy=energy_distribution, domains=[root], strength=1.0) # Root Universe
+
+    ## Kinetic settings
+    if (kinetic): 
+        settings.kinetic_simulation = True
+        settings.timestep_parameters = {'n_timesteps': 200, 'timestep_units': 's', 'dt':
+                                        1}
+        strength_timeseries = np.hstack((np.ones(50), np.zeros(150)))
+        source.strength_timeseries = strength_timeseries
+        settings.random_ray['source_shape'] = 'flat'
     
     settings.source = [source]
     #settings.export_to_xml()
@@ -373,7 +408,7 @@ def create_random_ray_model():
     #                   Exporting to OpenMC plots.xml file
     ###############################################################################
 
-    plot = openmc.Plot()
+    plot = openmc.VoxelPlot()
     plot.origin = [x/2.0, y/2.0, z/2.0]
     plot.width = [x, y, z]
     plot.pixels = [60, 100, 60]
@@ -392,5 +427,6 @@ def create_random_ray_model():
 
     return model
 
-model = create_random_ray_model()
+kinetic = parse_arguments()
+model = create_random_ray_model(kinetic=kinetic)
 model.export_to_model_xml()
