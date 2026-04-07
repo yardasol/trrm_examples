@@ -300,9 +300,9 @@ def create_random_ray_model(kinetic=False):
     ## Kinetic settings
     if (kinetic): 
         settings.kinetic_simulation = True
-        settings.timestep_parameters = {'n_timesteps': 200, 'timestep_units': 's', 'dt':
-                                        1}
-        strength_timeseries = np.hstack((np.ones(50), np.zeros(150)))
+        settings.timestep_parameters = {'n_timesteps': 100 , 'timestep_units': 's', 'dt':
+                                        2}
+        strength_timeseries = np.hstack((np.ones(25), np.zeros(75)))
         source.strength_timeseries = strength_timeseries
         settings.random_ray['source_shape'] = 'flat'
     
